@@ -60,11 +60,19 @@ int main(int argc, char **argv) {
   preProcess(&h_rgbaImage, &h_greyImage, &d_rgbaImage, &d_greyImage,
              input_file);
 
+  size_t numPixels = numRows() * numCols();
+
   GpuTimer timer;
   timer.Start();
   // call the students' code
   your_rgba_to_greyscale(h_rgbaImage, d_rgbaImage, d_greyImage, numRows(),
                          numCols());
+  // CPU implementation.
+  for (int i = 0; i < numPixels; i++) {
+    uchar4 *img = &h_rgbaImage[i];
+    h_greyImage[i] = .299f * (*img).x + .587f * (*img).y + .114f * (*img).z;
+  }
+
   timer.Stop();
   cudaDeviceSynchronize();
   checkCudaErrors(cudaGetLastError());
@@ -78,10 +86,9 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  size_t numPixels = numRows() * numCols();
-  checkCudaErrors(cudaMemcpy(h_greyImage, d_greyImage,
-                             sizeof(unsigned char) * numPixels,
-                             cudaMemcpyDeviceToHost));
+  // checkCudaErrors(cudaMemcpy(h_greyImage, d_greyImage,
+  //                            sizeof(unsigned char) * numPixels,
+  //                            cudaMemcpyDeviceToHost));
 
   // check results and output the grey image
   postProcess(output_file, h_greyImage);
