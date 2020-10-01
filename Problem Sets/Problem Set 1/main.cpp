@@ -4,6 +4,7 @@
 #include "reference_calc.h"
 #include "timer.h"
 #include "utils.h"
+#include <chrono>
 #include <iostream>
 #include <stdio.h>
 #include <string>
@@ -62,22 +63,31 @@ int main(int argc, char **argv) {
 
   size_t numPixels = numRows() * numCols();
 
-  GpuTimer timer;
-  timer.Start();
-  // call the students' code
-  your_rgba_to_greyscale(h_rgbaImage, d_rgbaImage, d_greyImage, numRows(),
-                         numCols());
+  auto cpuStart = std::chrono::high_resolution_clock::now();
+
   // CPU implementation.
   for (int i = 0; i < numPixels; i++) {
     uchar4 *img = &h_rgbaImage[i];
     h_greyImage[i] = .299f * (*img).x + .587f * (*img).y + .114f * (*img).z;
   }
 
+  auto cpuEnd = std::chrono::high_resolution_clock::now();
+  auto cpuElapsedTime =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(cpuEnd - cpuStart);
+
+  int err;
+  err = printf("CPU took: %f msecs.\n", cpuElapsedTime.count() / 1000000.);
+
+  GpuTimer timer;
+  timer.Start();
+  // call the students' code
+  your_rgba_to_greyscale(h_rgbaImage, d_rgbaImage, d_greyImage, numRows(),
+                         numCols());
   timer.Stop();
   cudaDeviceSynchronize();
   checkCudaErrors(cudaGetLastError());
 
-  int err = printf("Your code ran in: %f msecs.\n", timer.Elapsed());
+  err = printf("GPU took: %f msecs.\n", timer.Elapsed());
 
   if (err < 0) {
     // Couldn't print! Probably the student closed stdout - bad news
@@ -86,9 +96,9 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  // checkCudaErrors(cudaMemcpy(h_greyImage, d_greyImage,
-  //                            sizeof(unsigned char) * numPixels,
-  //                            cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(h_greyImage, d_greyImage,
+                             sizeof(unsigned char) * numPixels,
+                             cudaMemcpyDeviceToHost));
 
   // check results and output the grey image
   postProcess(output_file, h_greyImage);

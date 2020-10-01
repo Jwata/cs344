@@ -1,3 +1,4 @@
 c++
 -x
 cuda
+-std=c++17
