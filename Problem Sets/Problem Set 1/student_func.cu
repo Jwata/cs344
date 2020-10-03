@@ -66,7 +66,7 @@ __global__ void rgba_to_greyscale(const uchar4 *const rgbaImage,
   greyImage[i] = .299f * (*img).x + .587f * (*img).y + .114f * (*img).z;
 }
 
-int calc_grid_num(int x) { return ceil(x / 32.); }
+int calc_grid_num(int x) { return ceil(x / (float)(GRID_SIZE)); }
 
 // The speedup is > 50x for a 3024x4032 RGB image.
 // CPU took: 76.191647 msecs. (Intel(R) Xeon(R) CPU E5-2637 v4 @ 3.50GHz)

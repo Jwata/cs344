@@ -123,9 +123,9 @@ int main(int argc, char **argv) {
   GpuTimer timer;
   timer.Start();
   // call the students' code
-  // your_gaussian_blur(h_inputImageRGBA, d_inputImageRGBA, d_outputImageRGBA,
-  //                    numRows(), numCols(), d_redBlurred, d_greenBlurred,
-  //                    d_blueBlurred, filterWidth);
+  your_gaussian_blur(h_inputImageRGBA, d_inputImageRGBA, d_outputImageRGBA,
+                     numRows(), numCols(), d_redBlurred, d_greenBlurred,
+                     d_blueBlurred, filterWidth);
   timer.Stop();
   cudaDeviceSynchronize();
   checkCudaErrors(cudaGetLastError());
@@ -142,19 +142,18 @@ int main(int argc, char **argv) {
 
   size_t numPixels = numRows() * numCols();
   // copy the output back to the host
-  // checkCudaErrors(cudaMemcpy(h_outputImageRGBA, d_outputImageRGBA__,
-  //                            sizeof(uchar4) * numPixels,
-  //                            cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(h_outputImageRGBA, d_outputImageRGBA__,
+                             sizeof(uchar4) * numPixels,
+                             cudaMemcpyDeviceToHost));
 
   postProcess(output_file, h_outputImageRGBA);
 
-  referenceCalculation(h_inputImageRGBA, h_outputImageRGBA, numRows(),
-                       numCols(), h_filter, filterWidth);
-
-  postProcess(reference_file, h_outputImageRGBA);
+  // referenceCalculation(h_inputImageRGBA, h_outputImageRGBA, numRows(),
+  //                      numCols(), h_filter, filterWidth);
 
   //  Cheater easy way with OpenCV
-  // generateReferenceImage(input_file, reference_file, filterWidth);
+  generateReferenceImage(input_file, reference_file, filterWidth);
+  postProcess(reference_file, h_outputImageRGBA);
 
   compareImages(reference_file, output_file, useEpsCheck, perPixelError,
                 globalError);
