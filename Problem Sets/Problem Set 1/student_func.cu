@@ -34,6 +34,17 @@
 #include "math.h"
 #include "utils.h"
 
+#define GRID_SIZE 32
+
+__device__ int offset_1d(int numCols) {
+  // Calculate 2D position.
+  const int x = blockIdx.x * GRID_SIZE + threadIdx.x;
+  const int y = blockIdx.y * GRID_SIZE + threadIdx.y;
+
+  // Calculate 1D offset.
+  return y * numCols + x;
+}
+
 __global__ void rgba_to_greyscale(const uchar4 *const rgbaImage,
                                   unsigned char *const greyImage, int numRows,
                                   int numCols) {
@@ -50,20 +61,16 @@ __global__ void rgba_to_greyscale(const uchar4 *const rgbaImage,
   // to an absolute 2D location in the image, then use that to
   // calculate a 1D offset
 
-  // Calculate 2D position.
-  const int x = blockIdx.x * 32 + threadIdx.x;
-  const int y = blockIdx.y * 32 + threadIdx.y;
-
-  // Calculate 1D offset.
-  const int i = y * numCols + x;
-
+  const int i = offset_1d(numCols);
   const uchar4 *img = &rgbaImage[i];
   greyImage[i] = .299f * (*img).x + .587f * (*img).y + .114f * (*img).z;
 }
 
-int calc_grid_num(int x) {
-  return ceil(x/32.);
-}
+int calc_grid_num(int x) { return ceil(x / 32.); }
+
+// The speedup is > 50x for a 3024x4032 RGB image.
+// CPU took: 76.191647 msecs. (Intel(R) Xeon(R) CPU E5-2637 v4 @ 3.50GHz)
+// GPU took: 1.462208 msecs. (Tesla p100)
 
 void your_rgba_to_greyscale(const uchar4 *const h_rgbaImage,
                             uchar4 *const d_rgbaImage,
@@ -71,11 +78,10 @@ void your_rgba_to_greyscale(const uchar4 *const h_rgbaImage,
                             size_t numCols) {
   // You must fill in the correct sizes for the blockSize and gridSize
   // currently only one block with one thread is being launched
-  const dim3 blockSize(
-    calc_grid_num(numCols), calc_grid_num(numRows), 1);
-  const dim3 gridSize(32, 32, 1);
-  rgba_to_greyscale<<<blockSize, gridSize>>>(
-    d_rgbaImage, d_greyImage, numRows, numCols);
+  const dim3 blockSize(calc_grid_num(numCols), calc_grid_num(numRows), 1);
+  const dim3 gridSize(GRID_SIZE, GRID_SIZE, 1);
+  rgba_to_greyscale<<<blockSize, gridSize>>>(d_rgbaImage, d_greyImage, numRows,
+                                             numCols);
 
   cudaDeviceSynchronize();
   checkCudaErrors(cudaGetLastError());
