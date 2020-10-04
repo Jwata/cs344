@@ -80,6 +80,83 @@
 */
 
 #include "utils.h"
+#include <cstddef>
+
+__global__ void max_sequential(float *maxLuminance, const size_t sizeLum) {
+  for (size_t i = 1; i < sizeLum; i++) {
+    maxLuminance[0] = max(maxLuminance[i], maxLuminance[0]);
+  }
+}
+
+__global__ void min_sequential(float *minLuminance, const size_t sizeLum) {
+  for (size_t i = 1; i < sizeLum; i++) {
+    minLuminance[0] = min(minLuminance[i], minLuminance[0]);
+  }
+}
+
+__global__ void max_reduce(const float *const in, float *out, const int size) {
+  __shared__ float s_data[1024];
+
+  const int tid = threadIdx.x;
+  const int gid = blockIdx.x * blockDim.x + threadIdx.x;
+
+  // Copy global memory to shared memory in parallel.
+  if (gid < size)
+    s_data[tid] = in[gid];
+  __syncthreads_count(blockDim.x);
+
+  // Parallel reduction within the block.
+  for (int n = blockDim.x / 2; n > 0; n >>= 1) {
+    if (tid < n)
+      s_data[tid] = max(s_data[tid], s_data[tid + n]);
+    __syncthreads_count(blockDim.x);
+  }
+  if (tid == 0) out[blockIdx.x] = s_data[0];
+
+  // Note: it turned out that this implementation is slower than CPU.
+  // Only thread 0 does the following steps.
+  // if (tid == 0) {
+  //   float max_value;
+  //   max_value = s_data[0];
+  //   for (int i = 1; i < blockDim.x; i++) {
+  //     max_value = max(max_value, s_data[i]);
+  //   }
+  //   // printf("block:%d, value:%f\n", blockIdx.x, max_value);
+  //   out[blockIdx.x] = max_value;
+  // }
+}
+
+__global__ void min_reduce(const float *const in, float *out, const int size) {
+  __shared__ float s_data[1024];
+
+  const int tid = threadIdx.x;
+  const int gid = blockIdx.x * blockDim.x + threadIdx.x;
+
+  // Copy global memory to shared memory in parallel.
+  if (gid < size)
+    s_data[tid] = in[gid];
+  __syncthreads_count(blockDim.x);
+
+  // Parallel reduction within the block.
+  for (int n = blockDim.x / 2; n > 0; n >>= 1) {
+    if (tid < n)
+      s_data[tid] = min(s_data[tid], s_data[tid + n]);
+    __syncthreads_count(blockDim.x);
+  }
+  if (tid == 0) out[blockIdx.x] = s_data[0];
+
+  // Note: it turned out that this implementation is slower than CPU.
+  // Only thread 0 does the following steps.
+  // if (tid == 0) {
+  //   float min_value;
+  //   min_value = s_data[0];
+  //   for (int i = 1; i < blockDim.x; i++) {
+  //     min_value = min(min_value, s_data[i]);
+  //   }
+  //   // printf("block:%d, value:%f\n", blockIdx.x, min_value);
+  //   out[blockIdx.x] = min_value;
+  // }
+}
 
 void your_histogram_and_prefixsum(const float *const d_logLuminance,
                                   unsigned int *const d_cdf, float &min_logLum,
@@ -95,4 +172,30 @@ void your_histogram_and_prefixsum(const float *const d_logLuminance,
     4) Perform an exclusive scan (prefix sum) on the histogram to get
        the cumulative distribution of luminance values (this should go in the
        incoming d_cdf pointer which already has been allocated for you)       */
+
+  // TODO: Reduction can be more efficient.
+  // See the reference for more details.
+  // Optimizing Parallel Reduction in CUDA
+  // https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf
+  size_t sizeAcc = sizeof(float) * numCols * numRows / 1024;
+  float *d_maxLuminance;
+  float *d_minLuminance;
+  checkCudaErrors(cudaMalloc(&d_maxLuminance, sizeAcc));
+  checkCudaErrors(cudaMalloc(&d_minLuminance, sizeAcc));
+
+  int numBlocks = ceil(numCols * numRows / 1024.);
+  max_reduce<<<numBlocks, 1024>>>(d_logLuminance, d_maxLuminance,
+                                  numRows * numCols);
+  max_reduce<<<1, 1024>>>(d_maxLuminance, d_maxLuminance, 1024);
+  min_reduce<<<numBlocks, 1024>>>(d_logLuminance, d_minLuminance,
+                                  numRows * numCols);
+  min_reduce<<<1, 1024>>>(d_minLuminance, d_minLuminance, 1024);
+  cudaDeviceSynchronize();
+
+  checkCudaErrors(cudaMemcpy(&max_logLum, d_maxLuminance, sizeof(float),
+                             cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(&min_logLum, d_minLuminance, sizeof(float),
+                             cudaMemcpyDeviceToHost));
+
+  printf("maxLum %f, minLum %f\n", max_logLum, min_logLum);
 }

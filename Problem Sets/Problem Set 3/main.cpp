@@ -3,6 +3,7 @@
 #include "timer.h"
 #include "utils.h"
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <stdio.h>
 #include <string>
@@ -103,13 +104,20 @@ int main(int argc, char **argv) {
   // check results and output the tone-mapped image
   postProcess(output_file, numRows, numCols, min_logLum, max_logLum);
 
+  auto cpuStart = std::chrono::high_resolution_clock::now();
+  min_logLum = 0.f;
+  max_logLum = 1.f;
   for (size_t i = 1; i < numCols * numRows; ++i) {
     min_logLum = std::min(h_luminance[i], min_logLum);
     max_logLum = std::max(h_luminance[i], max_logLum);
   }
-
   referenceCalculation(h_luminance, h_cdf, numRows, numCols, numBins,
                        min_logLum, max_logLum);
+  auto cpuEnd = std::chrono::high_resolution_clock::now();
+  auto cpuElapsedTime =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(cpuEnd - cpuStart);
+  err = printf("CPU took: %f msecs.\n", cpuElapsedTime.count() / 1000000.);
+  printf("Expected: minLum: %f, maxLum: %f\n", min_logLum, max_logLum);
 
   checkCudaErrors(cudaMemcpy(d_cdf, h_cdf, sizeof(unsigned int) * numBins,
                              cudaMemcpyHostToDevice));
