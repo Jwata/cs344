@@ -111,7 +111,8 @@ __global__ void max_reduce(const float *const in, float *out, const int size) {
       s_data[tid] = max(s_data[tid], s_data[tid + n]);
     __syncthreads_count(blockDim.x);
   }
-  if (tid == 0) out[blockIdx.x] = s_data[0];
+  if (tid == 0)
+    out[blockIdx.x] = s_data[0];
 
   // Note: it turned out that this implementation is slower than CPU.
   // Only thread 0 does the following steps.
@@ -143,7 +144,8 @@ __global__ void min_reduce(const float *const in, float *out, const int size) {
       s_data[tid] = min(s_data[tid], s_data[tid + n]);
     __syncthreads_count(blockDim.x);
   }
-  if (tid == 0) out[blockIdx.x] = s_data[0];
+  if (tid == 0)
+    out[blockIdx.x] = s_data[0];
 
   // Note: it turned out that this implementation is slower than CPU.
   // Only thread 0 does the following steps.
@@ -156,6 +158,28 @@ __global__ void min_reduce(const float *const in, float *out, const int size) {
   //   // printf("block:%d, value:%f\n", blockIdx.x, min_value);
   //   out[blockIdx.x] = min_value;
   // }
+}
+
+__global__ void genHistogram(unsigned int *d_hist, const float *const in,
+                             size_t size, size_t d_numBins, float *d_maxValue,
+                             float *d_minValue) {
+  int gid = blockIdx.x * blockDim.x + threadIdx.x;
+
+  // Calculate range.
+  float valueMax = d_maxValue[0];
+  float valueMin = d_minValue[0];
+  float valueRange = valueMax - valueMin;
+  unsigned int numBins = d_numBins;
+  float binRange = valueRange / numBins;
+
+  // printf("valueMax=%f, valueMin=%f, valueRange=%f, numBins=%d,
+  // binRange=%f\n",
+  //        valueMax, valueMin, valueRange, numBins, binRange);
+
+  int bin = (in[gid] - valueMin) / binRange;
+
+  // TODO: sum up within shared memory before updating global memory.
+  atomicAdd(&d_hist[bin], 1);
 }
 
 void your_histogram_and_prefixsum(const float *const d_logLuminance,
@@ -196,6 +220,18 @@ void your_histogram_and_prefixsum(const float *const d_logLuminance,
                              cudaMemcpyDeviceToHost));
   checkCudaErrors(cudaMemcpy(&min_logLum, d_minLuminance, sizeof(float),
                              cudaMemcpyDeviceToHost));
-
   printf("maxLum %f, minLum %f\n", max_logLum, min_logLum);
+
+  unsigned int *d_histogram;
+  size_t sizeHist = sizeof(int) * numBins;
+  checkCudaErrors(cudaMalloc(&d_histogram, sizeHist));
+  genHistogram<<<numBlocks, 1024>>>(d_histogram, d_logLuminance,
+                                    numRows * numCols, numBins, d_maxLuminance,
+                                    d_minLuminance);
+  cudaDeviceSynchronize();
+
+  // unsigned int h_histogram[numBins];
+  // checkCudaErrors(
+  //     cudaMemcpy(&h_histogram, d_histogram, sizeHist,
+  //     cudaMemcpyDeviceToHost));
 }
