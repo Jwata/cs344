@@ -234,4 +234,8 @@ void your_histogram_and_prefixsum(const float *const d_logLuminance,
   // checkCudaErrors(
   //     cudaMemcpy(&h_histogram, d_histogram, sizeHist,
   //     cudaMemcpyDeviceToHost));
+
+  cudaFree(d_maxLuminance);
+  cudaFree(d_minLuminance);
+  cudaFree(d_histogram);
 }
